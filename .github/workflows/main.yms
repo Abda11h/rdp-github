@@ -1,0 +1,26 @@
+name: RDP Access
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-rdp:
+    runs-on: windows-latest
+
+    steps:
+    - name: Download ngrok
+      run: Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+
+    - name: Extract ngrok
+      run: Expand-Archive ngrok.zip -DestinationPath .
+
+    - name: Connect ngrok with your account
+      run: .\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+      env:
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    - name: Configure RDP User and Services
+      run: |
+        # إنشاء أو تحديث المستخدم runneradmin
+        if (-Not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
+          New-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString "P@ssw0rd!" -AsPlainText -Force) -FullName "Runner Admin" -Desc
