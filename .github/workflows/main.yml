@@ -1,0 +1,51 @@
+name: RDP Access
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-rdp:
+    runs-on: windows-latest
+
+    steps:
+    - name: Download ngrok
+      run: Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+
+    - name: Extract ngrok
+      run: Expand-Archive ngrok.zip -DestinationPath .
+
+    - name: Connect ngrok with your account
+      run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
+      env:
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    - name: Enable Remote Desktop
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+
+    - name: Set RDP Password
+      run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
+
+    - name: Start ngrok tunnel (background)
+      run: Start-Process -NoNewWindow -FilePath .\ngrok\ngrok.exe -ArgumentList "tcp 3389 --log=stdout > ngrok.log"
+
+    - name: Wait for ngrok to initialize
+      run: Start-Sleep -Seconds 15
+
+    - name: Try to show RDP address from API
+      continue-on-error: true
+      run: |
+        try {
+          $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
+          $rdp = $response.tunnels[0].public_url
+          Write-Output "✅ RDP address (from API):"
+          Write-Output $rdp
+        } catch {
+          Write-Warning "⚠️ Failed to fetch from API. Will check log next."
+        }
+
+    - name: Show ngrok log (fallback)
+      run: |
+        Get-Content ngrok.log | Select-String "tcp://"
